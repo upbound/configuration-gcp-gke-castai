@@ -402,8 +402,6 @@ spec:
                   name: default-by-castai
                   isEnabled: true
                   isDefault: true
-                  # clusterIdSelector:
-                  #   matchControllerRef: true
                   configurationIdSelector:
                     matchControllerRef: true
                   constraints:
