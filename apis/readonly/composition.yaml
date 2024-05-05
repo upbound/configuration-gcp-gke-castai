@@ -68,6 +68,14 @@ spec:
               - type: FromCompositeFieldPath
                 fromFieldPath: spec.parameters.deleteNodesOnDisconnect
                 toFieldPath: spec.forProvider.deleteNodesOnDisconnect
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.credentialsJsonSecretRef
+                toFieldPath: spec.forProvider.credentialsJsonSecretRef
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.id
+                toFieldPath: status.onboarding.clusterId
+                policy:
+                  fromFieldPath: Optional
 
           - name: agent
             base:

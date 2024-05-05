@@ -1,0 +1,12 @@
+apiVersion: castai.gcp.platform.upbound.io/v1alpha1
+kind: XFullAccess
+metadata:
+  name: configuration-gcp-gke-castai
+spec:
+  parameters:
+    id: configuration-gcp-gke-castai
+    region: us-west2
+    clusterName: # set-me
+    projectId: # set-me
+    subnets:
+      - # set-me

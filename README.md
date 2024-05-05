@@ -73,17 +73,45 @@ Create Cluster in ReadOnly mode:
 kubectl apply -f examples/readonly.yaml
 ```
 
+Create Cluster in FullAccess mode:
+```console
+kubectl apply -f examples/fullaccess.yaml
+```
+
 🎉 Congratulations. You have just installed your CAST AI configuration!
 
 ## Overview
 
+ReadOnly mode:
 ```
 crossplane beta trace xreadonly configuration-gcp-gke-castai
 NAME                                               SYNCED   READY   STATUS
 XReadOnly/configuration-gcp-gke-castai             True     True    Available
 ├─ GkeCluster/configuration-gcp-gke-castai-4crh2   True     True    Available
 └─ Release/configuration-gcp-gke-castai-dnkxz      True     True    Available
+```
 
+FullAccess mode:
+```console
+crossplane beta trace xfullaccess configuration-gcp-gke-castai
+NAME                                                             SYNCED   READY   STATUS
+XFullAccess/configuration-gcp-gke-castai                         True     True    Available
+├─ XReadOnly/configuration-gcp-gke-castai                        True     True    Available
+│  ├─ GkeCluster/configuration-gcp-gke-castai-4crh2              True     True    Available
+│  └─ Release/configuration-gcp-gke-castai-dnkxz                 True     True    Available
+├─ AutoScaler/configuration-gcp-gke-castai-886vq                 True     True    Available
+├─ NodeConfigurationDefault/configuration-gcp-gke-castai-8kmng   True     True    Available
+├─ NodeConfiguration/configuration-gcp-gke-castai-7mmzk          True     True    Available
+├─ NodeTemplate/configuration-gcp-gke-castai-g62dw               True     True    Available
+├─ ProjectIAMCustomRole/configuration-gcp-gke-castai-b577s       True     True    Available
+├─ ProjectIAMMember/configuration-gcp-gke-castai-4z4r4           True     True    Available
+├─ ProjectIAMMember/configuration-gcp-gke-castai-8gs4d           True     True    Available
+├─ ProjectIAMMember/configuration-gcp-gke-castai-hxt55           True     True    Available
+├─ ServiceAccountKey/configuration-gcp-gke-castai-mdfk4          True     True    Available
+├─ ServiceAccount/configuration-gcp-gke-castai-ck9sm             True     True    Available
+├─ Release/configuration-gcp-gke-castai-np8xr                    True     True    Available
+├─ Release/configuration-gcp-gke-castai-pccq2                    True     True    Available
+└─ Release/configuration-gcp-gke-castai-sk7hc                    True     True    Available
 ```
 
 ## Questions?

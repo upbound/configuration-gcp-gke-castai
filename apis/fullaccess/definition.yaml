@@ -1,12 +1,12 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xreadonly.castai.gcp.platform.upbound.io
+  name: xfullaccess.castai.gcp.platform.upbound.io
 spec:
   group: castai.gcp.platform.upbound.io
   names:
-    kind: XReadOnly
-    plural: xreadonly
+    kind: XFullAccess
+    plural: xfullaccess
   versions:
     - name: v1alpha1
       served: true
@@ -36,44 +36,34 @@ spec:
                     id:
                       type: string
                       description: ID of this Cluster that other objects will use to refer to it.
+                    deleteNodesOnDisconnect:
+                      type: boolean
+                      description: "Delete Nodes on Disconnect"
+                      default: false
                     clusterName:
                       type: string
-                      description: "GKE ClusterName"
+                      description: "EKS ClusterName"
+                    autoscalerPolicies:
+                      type: string
+                      description: "Autoscaler Policies for this Cluster"
                     region:
                       type: string
                       description: "Region for this GKE Cluster"
                     projectId:
                       type: string
-                      description: "GCP projectId for this GKE Cluster"
-                    deleteNodesOnDisconnect:
-                      type: boolean
-                      description: "Delete Nodes on Disconnect"
-                      default: false
-                    credentialsJsonSecretRef:
-                      description: |-
-                        (String, Sensitive) GCP credentials.json from ServiceAccount with credentials for CAST AI
-                        GCP credentials.json from ServiceAccount with credentials for CAST AI
-                      properties:
-                        key:
-                          description: The key to select.
-                          type: string
-                        name:
-                          description: Name of the secret.
-                          type: string
-                        namespace:
-                          description: Namespace of the secret.
-                          type: string
-                      required:
-                      - key
-                      - name
-                      - namespace
-                      type: object
+                      description: "GCP ProjectId for this GKE Cluster"
+                    subnets:
+                      type: array
+                      items:
+                        type: string
+                      description: subnets for this GKE Cluster Nodes
                   required:
                     - id
+                    - region
                     - projectId
                     - clusterName
-                    - region
                     - deleteNodesOnDisconnect
+                    - subnets
               required:
                 - parameters
             status:
@@ -81,6 +71,10 @@ spec:
               properties:
                 onboarding:
                   description: Freeform field containing information about the onboarding configured by this Setup.
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                gcp:
+                  description: Freeform field containing information about the GCP environment.
                   type: object
                   x-kubernetes-preserve-unknown-fields: true
               type: object
