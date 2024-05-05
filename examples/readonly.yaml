@@ -1,0 +1,12 @@
+apiVersion: castai.gcp.platform.upbound.io/v1alpha1
+kind: XReadOnly
+metadata:
+  name: configuration-gcp-gke-castai
+  annotations:
+    crossplane.io/composition-resource-name: cluster-readonly-to-fullaccess
+spec:
+  parameters:
+    id: configuration-gcp-gke-castai
+    region: us-west2
+    clusterName: # set-me
+    projectId: # set-me

@@ -1,0 +1,8 @@
+apiVersion: gcp.platform.upbound.io/v1alpha1
+kind: XNetwork
+metadata:
+  name: configuration-gcp-gke-castai
+spec:
+  parameters:
+    id: configuration-gcp-gke-castai
+    region: us-west2

@@ -1,0 +1,29 @@
+apiVersion: meta.pkg.crossplane.io/v1alpha1
+kind: Configuration
+metadata:
+  name: configuration-gcp-gke-castai
+  annotations:
+    meta.crossplane.io/maintainer: Upbound <support@upbound.io>
+    meta.crossplane.io/source: github.com/upbound/configuration-gcp-gke-castai
+    meta.crossplane.io/license: Apache-2.0
+    meta.crossplane.io/description: |
+      This Crossplane configuration is a starting point to use CASTAI in your own internal cloud.
+
+    meta.crossplane.io/readme: |
+      This Crossplane configuration is a starting point to use CASTAI in your own internal cloud.
+      To learn more checkout the [GitHub repo](https://github.com/upbound/configuration-gcp-gke-castai/)
+      that you can copy and customize to meet the exact needs of your organization!
+
+spec:
+  crossplane:
+    version: ">=v1.14.1-0"
+  dependsOn:
+    - configuration: xpkg.upbound.io/upbound/configuration-gcp-gke
+      # renovate: datasource=github-releases depName=upbound/configuration-gcp-gke
+      version: "v0.5.0"
+    - provider: xpkg.upbound.io/crossplane-contrib/crossplane-provider-castai
+      # renovate: datasource=github-releases depName=crossplane-contrib/crossplane-provider-castai
+      version: "v0.11.0"
+    - function: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform
+      # renovate: datasource=github-releases depName=crossplane-contrib/function-patch-and-transform
+      version: "v0.4.0"

@@ -1,0 +1,67 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xreadonly.castai.gcp.platform.upbound.io
+spec:
+  group: castai.gcp.platform.upbound.io
+  names:
+    kind: XReadOnly
+    plural: xreadonly
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                parameters:
+                  type: object
+                  description: Defines the castai integration
+                  properties:
+                    providerConfigName:
+                      description: Crossplane ProviderConfig to use for provisioning this resources
+                      type: string
+                      default: default
+                    deletionPolicy:
+                      description: Delete the external resources when the Claim/XR is deleted. Defaults to Delete
+                      enum:
+                        - Delete
+                        - Orphan
+                      type: string
+                      default: Delete
+                    id:
+                      type: string
+                      description: ID of this Cluster that other objects will use to refer to it.
+                    clusterName:
+                      type: string
+                      description: "GKE ClusterName"
+                    region:
+                      type: string
+                      description: "Region for this GKE Cluster"
+                    projectId:
+                      type: string
+                      description: "GCP projectId for this GKE Cluster"
+                    deleteNodesOnDisconnect:
+                      type: boolean
+                      description: "Delete Nodes on Disconnect"
+                      default: false
+                  required:
+                    - id
+                    - projectId
+                    - clusterName
+                    - region
+                    - deleteNodesOnDisconnect
+              required:
+                - parameters
+            status:
+              description: status represents the observed state of cast.ai onboarding.
+              properties:
+                onboarding:
+                  description: Freeform field containing information about the onboarding configured by this Setup.
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+              type: object
