@@ -1,0 +1,582 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xfullaccess.castai.gcp.platform.upbound.io
+  labels:
+    provider: gcp
+spec:
+  writeConnectionSecretsToNamespace: upbound-system
+  compositeTypeRef:
+    apiVersion: castai.gcp.platform.upbound.io/v1alpha1
+    kind: XFullAccess
+  mode: Pipeline
+  pipeline:
+    - step: render-resources
+      functionRef:
+        name: crossplane-contrib-function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{ $idTrimmed := sha1sum .observed.composite.resource.spec.parameters.id }}
+            {{ $sa := substr 0 8 $idTrimmed }}
+            ---
+            apiVersion: {{ .observed.composite.resource.apiVersion }}
+            kind: {{ .observed.composite.resource.kind }}
+            status:
+              gcp:
+                sa: {{ $sa }}
+
+    - step: patch-and-transform
+      functionRef:
+        name: crossplane-contrib-function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        patchSets:
+          - name: common
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.deletionPolicy
+                toFieldPath: spec.deletionPolicy
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.providerConfigName
+                toFieldPath: spec.providerConfigRef.name
+          - name: common-helm
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.deletionPolicy
+                toFieldPath: spec.deletionPolicy
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.id
+                toFieldPath: spec.providerConfigRef.name
+        resources:
+          - name: castai-role
+            base:
+              apiVersion: cloudplatform.gcp.upbound.io/v1beta1
+              kind: ServiceAccount
+            patches:
+              - type: PatchSet
+                patchSetName: common
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gcp.sa
+                toFieldPath: metadata.annotations[crossplane.io/external-name]
+                transforms:
+                  - string:
+                      fmt: 'castai-gke-xp-%s'
+                      type: Format
+                    type: string
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.id
+                toFieldPath: spec.forProvider.displayName
+                transforms:
+                  - string:
+                      fmt: 'Service account to manage cluster %s via CAST'
+                      type: Format
+                    type: string
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.email
+                toFieldPath: status.gcp.serviceAccount
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.id
+                toFieldPath: status.gcp.project
+                transforms:
+                  - type: string
+                    string:
+                      regexp:
+                        group: 1
+                        match: projects\/(.+)\/serviceAccounts\/.*
+                      type: Regexp
+
+          - name: castai-role-sakey
+            base:
+              apiVersion: cloudplatform.gcp.upbound.io/v1beta1
+              kind: ServiceAccountKey
+              spec:
+                forProvider:
+                  serviceAccountIdSelector:
+                    matchControllerRef: true
+            patches:
+              - type: PatchSet
+                patchSetName: common
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.writeConnectionSecretToRef.name
+                transforms:
+                  - type: string
+                    string:
+                      fmt: '%s-castai-sakey'
+                      type: Format
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.writeConnectionSecretToRef.namespace
+                toFieldPath: spec.writeConnectionSecretToRef.namespace
+
+          - name: castai-custom-role
+            base:
+              apiVersion: cloudplatform.gcp.upbound.io/v1beta1
+              kind: ProjectIAMCustomRole
+              spec:
+                forProvider:
+                  description: "Role to manage GKE cluster via CAST AI"
+                  title: "Role to manage GKE cluster via CAST AI"
+                  permissions:
+                    - compute.addresses.use
+                    - compute.disks.create
+                    - compute.disks.setLabels
+                    - compute.disks.use
+                    - compute.images.get
+                    - compute.images.useReadOnly
+                    - compute.instanceGroupManagers.get
+                    - compute.instanceGroupManagers.update
+                    - compute.instanceGroups.get
+                    - compute.instanceTemplates.create
+                    - compute.instanceTemplates.delete
+                    - compute.instanceTemplates.get
+                    - compute.instanceTemplates.list
+                    - compute.instances.create
+                    - compute.instances.delete
+                    - compute.instances.get
+                    - compute.instances.list
+                    - compute.instances.setLabels
+                    - compute.instances.setMetadata
+                    - compute.instances.setServiceAccount
+                    - compute.instances.setTags
+                    - compute.instances.start
+                    - compute.instances.stop
+                    - compute.networks.use
+                    - compute.networks.useExternalIp
+                    - compute.regionOperations.get
+                    - compute.subnetworks.get
+                    - compute.subnetworks.use
+                    - compute.subnetworks.useExternalIp
+                    - compute.zoneOperations.get
+                    - compute.zones.get
+                    - compute.zones.list
+                    - container.certificateSigningRequests.approve
+                    - container.clusters.get
+                    - container.clusters.update
+                    - resourcemanager.projects.getIamPolicy
+                    - serviceusage.services.list
+            patches:
+              - type: PatchSet
+                patchSetName: common
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gcp.project
+                toFieldPath: spec.forProvider.project
+                policy:
+                  fromFieldPath: Required
+              - type: CombineFromComposite
+                combine:
+                  strategy: string
+                  string:
+                    fmt: "castai.gkeAccess.%s.xp"
+                  variables:
+                    - fromFieldPath: status.gcp.sa
+                policy:
+                  fromFieldPath: Required
+                toFieldPath: metadata.annotations[crossplane.io/external-name]
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.id
+                toFieldPath: status.gcp.customRole
+
+          - name: castai-iam-member-dev
+            base:
+              apiVersion: cloudplatform.gcp.upbound.io/v1beta1
+              kind: ProjectIAMMember
+              spec:
+                forProvider:
+                  role: roles/container.developer
+            patches:
+              - type: PatchSet
+                patchSetName: common
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gcp.serviceAccount
+                toFieldPath: spec.forProvider.member
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      fmt: serviceAccount:%s
+                      type: Format
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gcp.project
+                toFieldPath: spec.forProvider.project
+                policy:
+                  fromFieldPath: Required
+
+          - name: castai-iam-member-sa-user
+            base:
+              apiVersion: cloudplatform.gcp.upbound.io/v1beta1
+              kind: ProjectIAMMember
+              spec:
+                forProvider:
+                  role: roles/iam.serviceAccountUser
+            patches:
+              - type: PatchSet
+                patchSetName: common
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gcp.serviceAccount
+                toFieldPath: spec.forProvider.member
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      fmt: serviceAccount:%s
+                      type: Format
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gcp.project
+                toFieldPath: spec.forProvider.project
+                policy:
+                  fromFieldPath: Required
+
+          - name: castai-iam-member-sa-custom-role
+            base:
+              apiVersion: cloudplatform.gcp.upbound.io/v1beta1
+              kind: ProjectIAMMember
+            patches:
+              - type: PatchSet
+                patchSetName: common
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gcp.serviceAccount
+                toFieldPath: spec.forProvider.member
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      fmt: serviceAccount:%s
+                      type: Format
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gcp.project
+                toFieldPath: spec.forProvider.project
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gcp.customRole
+                toFieldPath: spec.forProvider.role
+                policy:
+                  fromFieldPath: Required
+
+          - name: cluster-readonly-to-fullaccess
+            base:
+              apiVersion: castai.gcp.platform.upbound.io/v1alpha1
+              kind: XReadOnly
+              spec:
+                parameters:
+                  credentialsJsonSecretRef:
+                    key: "private_key"
+                    namespace: upbound-system
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.id
+                toFieldPath: metadata.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.id
+                toFieldPath: spec.parameters.id
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.deleteNodesOnDisconnect
+                toFieldPath: spec.parameters.deleteNodesOnDisconnect
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.parameters.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: spec.parameters.clusterName
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.parameters.credentialsJsonSecretRef.name
+                transforms:
+                  - type: string
+                    string:
+                      fmt: '%s-castai-sakey'
+                      type: Format
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.onboarding.clusterId
+                toFieldPath: status.onboarding.clusterId
+                policy:
+                  fromFieldPath: Optional
+
+          - name: cluster-node-configuration
+            base:
+              apiVersion: castai.upbound.io/v1alpha1
+              kind: NodeConfiguration
+              spec:
+                forProvider:
+                  diskCpuRatio: 0
+                  minDiskSize: 100
+            patches:
+              - type: PatchSet
+                patchSetName: common
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: metadata.labels[cast-ai-cluster]
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: spec.forProvider.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.onboarding.clusterId
+                toFieldPath: spec.forProvider.clusterId
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.subnets
+                toFieldPath: spec.forProvider.subnets
+
+          - name: cluster-node-configuration-default
+            base:
+              apiVersion: castai.upbound.io/v1alpha1
+              kind: NodeConfigurationDefault
+              spec:
+                forProvider:
+                  configurationIdSelector:
+                    matchControllerRef: true
+            patches:
+              - patchSetName: common
+                type: PatchSet
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: metadata.labels[cast-ai-cluster]
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.onboarding.clusterId
+                toFieldPath: spec.forProvider.clusterId
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: spec.forProvider.configurationIdSelector.matchLabels[cast-ai-cluster]
+
+          - name: cluster-autoscaler
+            base:
+              apiVersion: castai.upbound.io/v1alpha1
+              kind: AutoScaler
+              spec:
+                forProvider:
+                  autoscalerPoliciesJson: |
+                    {
+                      "enabled":true,
+                      "unschedulablePods":{
+                          "enabled":true
+                      },
+                      "nodeDownscaler":{
+                          "enabled":true,
+                          "emptyNodes":{
+                            "enabled":true
+                          },
+                          "evictor":{
+                            "aggressiveMode":false,
+                            "cycleInterval":"1m",
+                            "dryRun":false,
+                            "enabled":true,
+                            "nodeGracePeriodMinutes":10,
+                            "scopedMode":false
+                          }
+                      }
+                    }
+            patches:
+              - patchSetName: common
+                type: PatchSet
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: metadata.labels[cast-ai-cluster]
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.onboarding.clusterId
+                toFieldPath: spec.forProvider.clusterId
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.autoscalerPolicies
+                toFieldPath: spec.forProvider.autoscalerPoliciesJson
+
+          - name: cluster-default-node-template
+            base:
+              apiVersion: castai.upbound.io/v1alpha1
+              kind: NodeTemplate
+              spec:
+                forProvider:
+                  name: default-by-castai
+                  isEnabled: true
+                  isDefault: true
+                  configurationIdSelector:
+                    matchControllerRef: true
+                  constraints:
+                    - architectures:
+                        - amd64
+                      maxCpu: 64
+                      minCpu: 2
+                      minMemory: 4096
+                      maxMemory: 225280
+                      onDemand: true
+                      spot: true
+                      spotDiversityPriceIncreaseLimitPercent: 20
+                      enableSpotDiversity: false
+                      spotInterruptionPredictionsEnabled: true
+                      spotInterruptionPredictionsType: "interruption-predictions"
+                      useSpotFallbacks: true
+            patches:
+              - patchSetName: common
+                type: PatchSet
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: metadata.labels[cast-ai-cluster]
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.onboarding.clusterId
+                toFieldPath: spec.forProvider.clusterId
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: spec.forProvider.configurationIdSelector.matchLabels[cast-ai-cluster]
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: metadata.annotations[crossplane.io/external-name]
+                transforms:
+                  - type: match
+                    match:
+                      patterns:
+                        - type: regexp
+                          regexp: .*
+                          result: default-by-castai
+
+          - name: cluster-helm-chart-controller
+            base:
+              apiVersion: helm.crossplane.io/v1beta1
+              kind: Release
+              spec:
+                forProvider:
+                  chart:
+                    name: castai-cluster-controller
+                    repository: https://castai.github.io/helm-charts/
+                    version: 0.56.9
+                  namespace: castai-agent
+                  set:
+                    - name: castai.apiKey
+                      valueFrom:
+                        secretKeyRef:
+                          key: attribute.cluster_token
+                          namespace: upbound-system
+                          optional: false
+                    - name: castai.clusterID
+                      valueFrom:
+                        secretKeyRef:
+                          key: attribute.cluster_id
+                          namespace: upbound-system
+                          optional: false
+                rollbackLimit: 3
+            patches:
+              - type: PatchSet
+                patchSetName: common-helm
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: spec.forProvider.set[0].valueFrom.secretKeyRef.name
+                transforms:
+                  - string:
+                      fmt: castai-%s
+                      type: Format
+                    type: string
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: spec.forProvider.set[1].valueFrom.secretKeyRef.name
+                transforms:
+                  - string:
+                      fmt: castai-%s
+                      type: Format
+                    type: string
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: metadata.annotations[crossplane.io/external-name]
+                transforms:
+                  - match:
+                      fallbackValue: null
+                      patterns:
+                        - regexp: .*
+                          result: castai-cluster-controller
+                          type: regexp
+                    type: match
+
+          - name: cluster-helm-chart-evictor
+            base:
+              apiVersion: helm.crossplane.io/v1beta1
+              kind: Release
+              spec:
+                forProvider:
+                  chart:
+                    name: castai-evictor
+                    repository: https://castai.github.io/helm-charts/
+                    version: 0.26.24
+                  namespace: castai-agent
+                rollbackLimit: 3
+            patches:
+              - type: PatchSet
+                patchSetName: common-helm
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: metadata.annotations[crossplane.io/external-name]
+                transforms:
+                  - type: match
+                    match:
+                      fallbackValue: null
+                      patterns:
+                        - type: regexp
+                          regexp: .*
+                          result: castai-evictor
+
+          - name: cast-ai-cluster-helm-chart-spot
+            base:
+              apiVersion: helm.crossplane.io/v1beta1
+              kind: Release
+              spec:
+                forProvider:
+                  chart:
+                    name: castai-spot-handler
+                    repository: https://castai.github.io/helm-charts/
+                    version: 0.19.7
+                  namespace: castai-agent
+                  set:
+                    - name: castai.clusterID
+                      valueFrom:
+                        secretKeyRef:
+                          key: attribute.cluster_id
+                          namespace: upbound-system
+                          optional: false
+                  values:
+                    castai:
+                      provider: gcp
+                rollbackLimit: 3
+            patches:
+              - type: PatchSet
+                patchSetName: common-helm
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: spec.forProvider.set[0].valueFrom.secretKeyRef.name
+                transforms:
+                  - type: string
+                    string:
+                      fmt: castai-%s
+                      type: Format
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.clusterName
+                toFieldPath: metadata.annotations[crossplane.io/external-name]
+                transforms:
+                  - type: match
+                    match:
+                      patterns:
+                        - type: regexp
+                          regexp: .*
+                          result: castai-spot-handler
+
+    - step: sequence-render-resources
+      functionRef:
+        name: crossplane-contrib-function-sequencer
+      input:
+        apiVersion: sequencer.fn.crossplane.io/v1beta1
+        kind: Input
+        rules:
+          - sequence:
+              - castai-role-sakey
+              - cluster-readonly-to-fullaccess
