@@ -580,5 +580,5 @@ spec:
         kind: Input
         rules:
           - sequence:
-            - castai-role-sakey
-            - cluster-readonly-to-fullaccess
+              - castai-role-sakey
+              - cluster-readonly-to-fullaccess
